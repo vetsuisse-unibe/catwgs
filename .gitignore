@@ -1,0 +1,83 @@
+# Nextflow files
+work/
+.nextflow/
+.nextflow.log*
+nextflow.log*
+*.log.*
+
+# Results and output directories
+results/
+reports/
+dedup_bams/
+gVCFs/
+cohortMap/
+genomicsDB/
+vcf/
+final_vcf/
+extract_results/
+merged_vcf/
+filtered_snp_vcf/
+filtered_nonsnp_vcf/
+snp_vcf/
+nonsnp_vcf/
+
+# Output files
+*.out
+*.err
+final_output.txt
+head.txt
+*.list
+*.zst
+*.vcf
+*.vcf.gz
+*.vcf.gz.tbi
+*.g.vcf.gz
+*.g.vcf.gz.tbi
+*.bam
+*.bam.bai
+*.cram
+*.cram.crai
+
+# Temporary files
+tmp/
+.nextflow.pid
+cohort*.txt
+all_vcfs.list
+
+# SLURM logs
+slurm-*.out
+logs/*.out
+logs/*.err
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+
+# R
+.RData
+.Rhistory
+.Rproj.user
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keep logs directory but not contents
+logs/*
+!logs/.gitkeep
+
+# Keep empty directories
+!extract_results/.gitkeep
+!reports/.gitkeep
