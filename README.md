@@ -1,5 +1,9 @@
 # CATWGS: Felis Catus Whole Genome Sequencing Pipeline
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17434829.svg)](https://doi.org/10.5281/zenodo.17434829)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A521.10.3-23aa62.svg)](https://www.nextflow.io/)
+
 A Nextflow DSL2 pipeline for processing *Felis catus* (domestic cat) whole genome sequencing data using BWA-MEM2 alignment and GATK best practices for variant calling.
 
 ## Overview
