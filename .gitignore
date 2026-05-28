@@ -11,7 +11,7 @@ reports/
 dedup_bams/
 gVCFs/
 cohortMap/
-genomicsDB/
+/genomicsDB/
 vcf/
 final_vcf/
 extract_results/

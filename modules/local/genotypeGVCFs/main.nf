@@ -4,6 +4,13 @@ process genotypeGVCFs {
     scratch true  // Use scratch space for the entire process
     publishDir params.vcfFolder, mode: 'copy'
 
+    // Retry on transient failures, including external termination (null exit
+    // status) from SLURM node/staging issues, so one bad node doesn't abort
+    // the full scatter.
+    errorStrategy { (task.exitStatus == null || task.exitStatus in [143,137,104,134,139,1,255]) ? 'retry' : 'finish' }
+    maxRetries 3
+    maxErrors -1
+
     input:
     tuple val(interval), path(dbfile)
     path(ref)
