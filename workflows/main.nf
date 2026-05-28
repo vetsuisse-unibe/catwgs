@@ -5,36 +5,51 @@ include { runFastp } from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/m
 include { runBWA } from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/modules/local/bwa-mem/main'
 include { mergeBams } from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/modules/local/mergeBams/main'
 include { markDuplicates } from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/modules/local/markDuplicates/main'
-include { haplotypeCaller } from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/modules/local/hc/main'
+include { haplotypeCaller } from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/hc/main'
 include { gatherVCFs } from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/gatherVCFs/main'  
 include { indexgVCF } from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/indexgVCF/main'
 include {createCohortMapFile} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/createCohortMapFile/main'
 // include {createCohortMap} from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/modules/local/createCohortMap/main' // Commented out - using local definition
 include {genomicsDB} from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/modules/local/genomicsDB/main'
 include {genotypeGVCFs} from '/data/projects/p926_Lynx_whole_genome_analysis/dsl2/modules/local/genotypeGVCFs/main'
+include {gatherFinalVCFs} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/gatherFinalVCFs/main'
+include {selectSNP} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/selectSNP/main'
+include {selectNonSNP} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/selectNonSNP/main'
+include {filterSNPs} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/filterSNPs/main'
+include {filterNonSNPs} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/filterNonSNPs/main'
+include {annotateSNPs} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/annotateSNPs/main'
+include {annotateNonSNPs} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/annotateNonSNPs/main'
+include {mergeAnnotatedVCFs} from '/data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/modules/local/mergeAnnotatedVCFs/main'
 
-params.entry_point = 'start' // Options: start, haplotypecaller, cohortmap
+params.entry_point = 'start' // Options: start, haplotypecaller, cohortmap, variantprocessing
 
 // Define the createCohortMap process once
 process createCohortMap {
     publishDir "${params.cohortMapFolder}/assets", mode: 'copy'
-    
+
+    // Always re-scan the gVCF folder so newly added gVCFs are picked up under
+    // -resume. The only input is the folder path string, so without this the task
+    // would cache on the path and reuse a stale map. The map is cheap to rebuild;
+    // downstream genomicsDB stays cache-gated on the map's contents.
+    cache false
+
     input:
         val gvcf_folder
-    
+
     output:
         path "cohort_*.sample_map", emit: cohortMapFile
-    
+
     script:
     """
-    # Find all gVCF files and create the cohort map
-    SAMPLE_COUNT=\$(find ${gvcf_folder} -name "*.g.vcf.gz" | wc -l)
+    # Find all gVCF files and create the cohort map (maxdepth 1 to avoid subdirectories)
+    SAMPLE_COUNT=\$(find ${gvcf_folder} -maxdepth 1 -name "*.g.vcf.gz" | wc -l)
     COHORT_FILE="cohort_\${SAMPLE_COUNT}.sample_map"
-    
-    find ${gvcf_folder} -name "*.g.vcf.gz" | while read vcf; do
+
+    # sort for deterministic output and write in one shot (truncate, never append)
+    find ${gvcf_folder} -maxdepth 1 -name "*.g.vcf.gz" | sort | while read vcf; do
         sample=\$(basename \$vcf .g.vcf.gz)
-        echo -e "\${sample}\t\${vcf}" >> \${COHORT_FILE}
-    done
+        echo -e "\${sample}\t\${vcf}"
+    done > \${COHORT_FILE}
     """
 }
 
@@ -121,7 +136,7 @@ workflow LYNXWGS {
         bam_intervals = duplicateMarkedBam.combine(interval_ch)
         
         // Run HaplotypeCaller to generate gVCFs
-        gvcfs = haplotypeCaller(bam_intervals, Channel.from(params.ref), Channel.from(params.fai), Channel.from(params.dict)).gvcfHaplotypeCaller
+        gvcfs = haplotypeCaller(bam_intervals, Channel.value(tuple(file(params.ref), file(params.fai), file(params.dict)))).gvcfHaplotypeCaller
         
         // Group gVCFs by sample for gathering
         gvcfs_by_sample = gvcfs.groupTuple(by: 0)
@@ -172,7 +187,7 @@ workflow LYNXWGS {
             .view { "Combined channel emitting: $it" }
         
         // Run HaplotypeCaller to generate gVCFs
-        gvcfs = haplotypeCaller(bam_intervals, Channel.from(params.ref), Channel.from(params.fai), Channel.from(params.dict)).gvcfHaplotypeCaller
+        gvcfs = haplotypeCaller(bam_intervals, Channel.value(tuple(file(params.ref), file(params.fai), file(params.dict)))).gvcfHaplotypeCaller
         
         // Group gVCFs by sample for gathering
         gvcfs_by_sample = gvcfs.groupTuple(by: 0)
@@ -197,17 +212,70 @@ workflow LYNXWGS {
         cohortMapFile = createCohortMap(Channel.from(params.gVCF_folder))
     }
 
-    if (params.entry_point != 'cohortmap') {
-        //Wait for indexing to complete before creating cohort map
-        gvcf_folder_ch = indexedgVCFs.collect().map{ it -> params.gVCF_folder }
+    // Joint genotyping + variant processing only run for the 'cohortmap' and
+    // 'variantprocessing' entry points. 'start' and 'haplotypecaller' stop after
+    // per-sample gVCFs are generated and indexed, so they no longer trigger a
+    // redundant joint-genotyping/annotation pass over a stale cohort.
+    if (params.entry_point == 'cohortmap' || params.entry_point == 'variantprocessing') {
 
-        // Run createCohortMap with the folder from indexing
-        cohortMapFile = createCohortMap(gvcf_folder_ch)
+        if (params.entry_point == 'variantprocessing') {
+            // Collect all VCF files from vcfFolder
+            all_vcfs = Channel.fromPath("${params.vcfFolder}/*.vcf").collect()
+            log.info "Starting variant processing from existing VCFs in ${params.vcfFolder}"
+        } else {
+            // cohortmap: cohortMapFile and regions_ch were created in the branch above
+            cohortMap_intervals = cohortMapFile.combine(regions_ch)
+
+            // run genomicsDB and final genotyping
+            genomicsDB_out = genomicsDB(cohortMap_intervals)
+            genotyped_vcfs = genotypeGVCFs(genomicsDB_out, Channel.value(params.ref), Channel.value(params.fai), Channel.value(params.dict))
+
+            // Gather all regional VCFs into a single cohort VCF
+            all_vcfs = genotyped_vcfs.vcf_out.map { it[1] }.collect()
+        }
+
+        // === VARIANT PROCESSING PIPELINE ===
+        final_vcf = gatherFinalVCFs(
+            all_vcfs,
+            Channel.value(file(params.ref)),
+            Channel.value(file(params.fai)),
+            Channel.value(file(params.dict))
+        )
+
+        // Reference channels for variant processing
+        ref_ch = Channel.value(file(params.ref))
+        fai_ch = Channel.value(file(params.fai))
+        dict_ch = Channel.value(file(params.dict))
+
+        // Select SNPs and Non-SNPs in parallel
+        snp_raw = selectSNP(final_vcf.final_vcf, ref_ch, fai_ch, dict_ch)
+        nonsnp_raw = selectNonSNP(final_vcf.final_vcf, ref_ch, fai_ch, dict_ch)
+
+        // Filter SNPs and Non-SNPs
+        snp_filtered = filterSNPs(snp_raw.snp_vcf, ref_ch, fai_ch, dict_ch)
+        nonsnp_filtered = filterNonSNPs(nonsnp_raw.nonsnp_vcf, ref_ch, fai_ch, dict_ch)
+
+        // Annotate with snpEff
+        snp_annotated = annotateSNPs(
+            snp_filtered.filtered_snp_vcf,
+            Channel.value(params.snpeff_path),
+            Channel.value(params.snpeff_config),
+            Channel.value(params.genome_version)
+        )
+        nonsnp_annotated = annotateNonSNPs(
+            nonsnp_filtered.filtered_nonsnp_vcf,
+            Channel.value(params.snpeff_path),
+            Channel.value(params.snpeff_config),
+            Channel.value(params.genome_version)
+        )
+
+        // Merge annotated VCFs
+        mergeAnnotatedVCFs(
+            snp_annotated.annotated_snp_vcf,
+            nonsnp_annotated.annotated_nonsnp_vcf,
+            ref_ch,
+            fai_ch,
+            dict_ch
+        )
     }
-
-    cohortMap_intervals=cohortMapFile.combine(regions_ch)
-
-    //run genomicsDB and final genotyping
-    genomicsDB_out = genomicsDB(cohortMap_intervals)
-    genotypeGVCFs(genomicsDB_out, Channel.from(params.ref), Channel.from(params.fai), Channel.from(params.dict))
 }
