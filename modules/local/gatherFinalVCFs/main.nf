@@ -23,26 +23,34 @@ process gatherFinalVCFs {
     echo "GatherVcfs temp directory: \$SCRATCH/tmp_gather"
     echo "Number of VCF files: \$(ls -1 *.vcf 2>/dev/null | wc -l)"
 
-    # Extract chromosome order from the reference dictionary
-    grep -oP '(?<=SN:).*?(?=\\t)' ${dict} > chrom_order.txt
+    # Extract chromosome order from the reference dictionary (preserves dict order)
+    grep -oP '(?<=SN:)[^\\t]*' ${dict} > chrom_order.txt
 
-    # Create a sorted list based on chromosome and position
-    ls -1 *.vcf | while read vcf; do
-        # Extract chromosome/scaffold name and position from filename
-        # Match both chr* and NW_* (scaffolds)
-        chrom=\$(echo \$vcf | grep -oP '(chr[^_]*|NW_[0-9]+\\.[0-9]+)')
-        pos=\$(echo \$vcf | grep -oP '\\d+-\\d+')
+    # Build the sorted gather list from each chunk's ACTUAL first-record contig and
+    # position, read from the VCF content itself. This is robust to every contig
+    # naming style (chr*, NW_* scaffolds, MT) instead of regex-parsing the filename,
+    # which silently dropped MT (no 'chr'/'NW_' prefix) and any non-matching contig.
+    # Empty chunks (header only) carry no variants and are skipped.
+    : > sorted_keys.tsv
+    for vcf in *.vcf; do
+        first=\$(grep -m1 -v '^#' "\$vcf" || true)
+        if [ -z "\$first" ]; then
+            echo "Skipping empty chunk (no records): \$vcf" >&2
+            continue
+        fi
+        chrom=\$(printf '%s' "\$first" | cut -f1)
+        pos=\$(printf '%s' "\$first" | cut -f2)
 
-        # Find the index of this chromosome in the reference order
-        idx=\$(grep -n "^\$chrom\$" chrom_order.txt | cut -d':' -f1)
+        # Index of this contig in the reference dictionary order
+        idx=\$(grep -nxF "\$chrom" chrom_order.txt | head -1 | cut -d':' -f1)
         if [ -z "\$idx" ]; then
-            # If not found, assign a large number to put it at the end
+            # Contig not in dictionary: place at the end (should not happen)
             idx=999999
         fi
 
-        # Output with sortable prefix
-        printf "%06d\\t%s\\t%s\\n" "\$idx" "\$pos" "\$vcf"
-    done | sort -k1,1n -k2,2V | cut -f3 > sorted_vcf.list
+        printf "%06d\\t%012d\\t%s\\n" "\$idx" "\$pos" "\$vcf" >> sorted_keys.tsv
+    done
+    sort -k1,1n -k2,2n sorted_keys.tsv | cut -f3 > sorted_vcf.list
 
     # Print the sorted list for debugging
     echo "Sorted VCF list (first 10):"
