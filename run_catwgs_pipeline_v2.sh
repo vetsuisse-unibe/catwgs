@@ -29,14 +29,16 @@ echo "Starting Nextflow CATWGS v2 pipeline at $(date)"
 echo "Sample sheet: $(realpath assets/sampleSheet_Sep2025.txt)"
 echo "Number of samples: $(($(wc -l < assets/sampleSheet_Sep2025.txt) - 1))"
 
-# Entry point options for main_v2.nf:
-# --entry_point fastp         : Start from FastP (default - full pipeline)
-# --entry_point markduplicates: Start from mark duplicates (requires --input_bams)
-# --entry_point gathervcfs    : Start from gather VCFs (requires --input_gvcfs)
+# Entry point options (see workflows/main_v2.nf):
+# --entry_point markdup           : FASTQ -> dedup BAMs
+# --entry_point start             : FASTQ -> dedup BAMs -> per-sample gVCFs
+# --entry_point haplotypecaller   : existing dedup BAMs -> per-sample gVCFs
+# --entry_point cohortmap         : all gVCFs -> joint genotyping -> filtered, annotated VCF
+# --entry_point variantprocessing : existing regional VCFs -> filtered, annotated VCF
 
-/data/users/vjaganna/software/nextflow run workflows/main_v2.nf \
+/data/users/vjaganna/software/nextflow run main.nf \
     -profile unibe \
-    --entry_point fastp \
+    --entry_point start \
     -with-report reports/nextflow_v2_report_$(date +%Y%m%d_%H%M%S).html \
     -with-timeline reports/nextflow_v2_timeline_$(date +%Y%m%d_%H%M%S).html \
     -with-trace reports/nextflow_v2_trace_$(date +%Y%m%d_%H%M%S).txt \

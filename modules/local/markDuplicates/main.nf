@@ -4,7 +4,7 @@ nextflow.enable.dsl=2
 
 process markDuplicates {
     tag "${sampleID}"
-    publishDir "${params.dedup}", mode: 'symlink', overwrite: true
+    publishDir "${params.dedup}", mode: 'copy', overwrite: true
     scratch true  // Use scratch space for the entire process
 
     input:

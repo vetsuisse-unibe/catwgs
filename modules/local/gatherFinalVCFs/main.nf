@@ -21,7 +21,10 @@ process gatherFinalVCFs {
     # Print current working directory for debugging
     echo "Process working directory: \$PWD"
     echo "GatherVcfs temp directory: \$SCRATCH/tmp_gather"
-    echo "Number of VCF files: \$(ls -1 *.vcf 2>/dev/null | wc -l)"
+    # Chunks may be plain .vcf or bgzipped .vcf.gz
+    shopt -s nullglob
+    chunks=( *.vcf *.vcf.gz )
+    echo "Number of VCF files: \${#chunks[@]}"
 
     # Extract chromosome order from the reference dictionary (preserves dict order)
     grep -oP '(?<=SN:)[^\\t]*' ${dict} > chrom_order.txt
@@ -32,8 +35,8 @@ process gatherFinalVCFs {
     # which silently dropped MT (no 'chr'/'NW_' prefix) and any non-matching contig.
     # Empty chunks (header only) carry no variants and are skipped.
     : > sorted_keys.tsv
-    for vcf in *.vcf; do
-        first=\$(grep -m1 -v '^#' "\$vcf" || true)
+    for vcf in "\${chunks[@]}"; do
+        first=\$(gzip -cdf "\$vcf" 2>/dev/null | grep -m1 -v '^#' || true)
         if [ -z "\$first" ]; then
             echo "Skipping empty chunk (no records): \$vcf" >&2
             continue
@@ -42,7 +45,7 @@ process gatherFinalVCFs {
         pos=\$(printf '%s' "\$first" | cut -f2)
 
         # Index of this contig in the reference dictionary order
-        idx=\$(grep -nxF "\$chrom" chrom_order.txt | head -1 | cut -d':' -f1)
+        idx=\$(grep -nxF "\$chrom" chrom_order.txt | head -1 | cut -d':' -f1 || true)
         if [ -z "\$idx" ]; then
             # Contig not in dictionary: place at the end (should not happen)
             idx=999999
@@ -51,6 +54,21 @@ process gatherFinalVCFs {
         printf "%06d\\t%012d\\t%s\\n" "\$idx" "\$pos" "\$vcf" >> sorted_keys.tsv
     done
     sort -k1,1n -k2,2n sorted_keys.tsv | cut -f3 > sorted_vcf.list
+
+    if [ ! -s sorted_vcf.list ]; then
+        echo "ERROR: no non-empty VCF chunks to gather" >&2
+        exit 1
+    fi
+
+    # Two chunks starting at the same contig/position means the input folder holds
+    # duplicate chunks (e.g. old .vcf next to new .vcf.gz); GatherVcfs would fail or
+    # duplicate records.
+    dups=\$(cut -f1,2 sorted_keys.tsv | sort | uniq -d)
+    if [ -n "\$dups" ]; then
+        echo "ERROR: multiple VCF chunks start at the same position:" >&2
+        grep -F -f <(printf '%s\\n' "\$dups") sorted_keys.tsv >&2
+        exit 1
+    fi
 
     # Print the sorted list for debugging
     echo "Sorted VCF list (first 10):"
