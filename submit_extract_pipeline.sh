@@ -4,7 +4,7 @@
 
 echo "=========================================="
 echo "Submitting Variant Extraction Pipeline"
-echo "Cohort: cohort_124 (124 samples)"
+echo "Cohort: cohort_136 (136 samples)"
 echo "Regions: 2478 genomic regions"
 echo "Timestamp: $(date)"
 echo "=========================================="
@@ -23,9 +23,15 @@ echo "  - head.txt created successfully"
 echo "  - Number of fields: $(head -1 head.txt | awk '{print NF}')"
 
 # Step 2: Submit extraction array job (2478 regions in parallel)
+# Optional arg $1 = an upstream job ID (e.g. VCF indexing) to wait on (afterok).
 echo ""
 echo "Step 2: Submitting extraction array job..."
-JOB1=$(sbatch --parsable extract_regions.sh)
+DEP_ARG=""
+if [ -n "${1:-}" ]; then
+    DEP_ARG="--dependency=afterok:$1"
+    echo "  - extraction will wait for upstream job $1 (afterok)"
+fi
+JOB1=$(sbatch --parsable $DEP_ARG extract_regions.sh)
 echo "  - extract_regions.sh submitted: Job ID $JOB1 (2478 array tasks)"
 
 # Step 3: Submit merge job (depends on all extraction tasks completing)

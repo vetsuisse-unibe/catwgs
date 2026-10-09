@@ -23,7 +23,7 @@ outfile="extract_results/$(echo $region | tr ':' '_' | tr '-' '_').zst"
 mkdir -p extract_results logs
 
 # Process the region
-tabix /data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/final_vcf/cohort_124.var.flt.ann.vcf.gz ${region} |
+tabix /data/projects/p531_Felis_Catus__whole_genome_Analysis/nextFlow/dsl2/final_vcf/cohort_136.var.flt.ann.renamed.vcf.gz ${region} |
     /data/users/vjaganna/software/snpEff/scripts/vcfEffOnePerLine.pl |
     java -Xmx16g -jar /data/users/vjaganna/software/snpEff/SnpSift.jar extractFields - \
     CHROM POS REF ALT FILTER "GEN[*].GT" "ANN[*].ALLELE" "ANN[*].EFFECT" \

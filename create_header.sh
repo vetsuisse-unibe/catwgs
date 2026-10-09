@@ -4,7 +4,7 @@
 
 set -e
 
-VCF_FILE="final_vcf/cohort_124.var.flt.ann.vcf.gz"
+VCF_FILE="final_vcf/cohort_136.var.flt.ann.renamed.vcf.gz"
 OUTPUT_FILE="head.txt"
 
 echo "Creating header file: ${OUTPUT_FILE}"
